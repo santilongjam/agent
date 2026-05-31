@@ -27,4 +27,5 @@ def get_db():
 def init_db():
     __import__("app.models.task")          # registers TaskModel
     __import__("app.models.conversation")  # registers ConversationMessage
+    __import__("app.models.user")          # registers UserModel
     Base.metadata.create_all(bind=engine)

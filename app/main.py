@@ -1,7 +1,23 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 from app.routers import tasks, users, agent, rag
 from app.database import init_db
+
+load_dotenv()
+
+_REQUIRED_ENV_VARS = ["GROQ_API_KEY", "QDRANT_URL", "QDRANT_API_KEY"]
+
+def _validate_env():
+    missing = [v for v in _REQUIRED_ENV_VARS if not os.getenv(v)]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+_validate_env()
+
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
 
 app = FastAPI(
     title="Tasks API",
@@ -9,10 +25,9 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# For CORS - used for security - domain restriction
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

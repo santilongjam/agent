@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
@@ -17,8 +18,13 @@ load_dotenv()
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path("uploads").resolve()
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))  # 20 MB default
+
+_ALLOWED_URL_SCHEMES = {"http", "https"}
+_BLOCKED_HOSTS = {"169.254.169.254", "metadata.google.internal", "localhost", "127.0.0.1", "::1"}
 
 _llm = ChatGroq(
     model="llama-3.3-70b-versatile",
@@ -86,18 +92,39 @@ class QueryRequest(BaseModel):
     question: str
 
 
+def _safe_filename(filename: str) -> str:
+    name = Path(filename).name
+    if not name or name != filename or "/" in name or "\\" in name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    return name
+
+
+def _validate_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_URL_SCHEMES:
+        raise HTTPException(status_code=400, detail="Only http/https URLs are allowed")
+    host = parsed.hostname or ""
+    if host in _BLOCKED_HOSTS:
+        raise HTTPException(status_code=400, detail="URL host is not allowed")
+
+
 @router.post("/upload-pdf", summary="Upload a PDF and store in Qdrant")
 async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
+    if not (file.filename or "").endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-    save_path = UPLOAD_DIR / file.filename
-    save_path.write_bytes(await file.read())
+    safe_name = _safe_filename(file.filename)
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File exceeds {MAX_UPLOAD_BYTES // (1024*1024)} MB limit")
+
+    save_path = UPLOAD_DIR / safe_name
+    save_path.write_bytes(content)
 
     try:
         chunk_count = await run_in_threadpool(_ingest_pdf, str(save_path))
         return {
-            "message": f"Stored {chunk_count} chunks from '{file.filename}'",
+            "message": f"Stored {chunk_count} chunks from '{safe_name}'",
             "saved_path": str(save_path),
         }
     except Exception as e:
@@ -106,6 +133,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 @router.post("/scrape", summary="Scrape a website and store in Qdrant")
 async def scrape_website(request: ScrapeRequest):
+    _validate_url(request.url)
     try:
         chunk_count = await run_in_threadpool(_ingest_url, request.url)
         return {"message": f"Stored {chunk_count} chunks from {request.url}"}
@@ -124,7 +152,10 @@ async def query_rag(request: QueryRequest):
 
 @router.get("/download/{filename}", summary="Download an uploaded PDF")
 def download_file(filename: str):
-    file_path = UPLOAD_DIR / filename
+    safe_name = _safe_filename(filename)
+    file_path = (UPLOAD_DIR / safe_name).resolve()
+    if not str(file_path).startswith(str(UPLOAD_DIR)):
+        raise HTTPException(status_code=400, detail="Invalid filename")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path=str(file_path), filename=filename, media_type="application/pdf")
+    return FileResponse(path=str(file_path), filename=safe_name, media_type="application/pdf")

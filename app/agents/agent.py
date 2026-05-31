@@ -25,7 +25,8 @@ _system_prompt = (
     "Always confirm actions with the user's intent and be concise in your responses."
 )
 
-_conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
+_checkpoints_db = os.getenv("CHECKPOINTS_DB_PATH", "checkpoints.db")
+_conn = sqlite3.connect(_checkpoints_db, check_same_thread=False)
 _memory = SqliteSaver(_conn)
 
 agent = create_agent(_llm, _tools, checkpointer=_memory, system_prompt=_system_prompt)

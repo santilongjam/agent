@@ -1,10 +1,11 @@
 import os
-import sqlite3
+import psycopg
 from typing import Generator
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessageChunk
+from langgraph.checkpoint.postgres import PostgresSaver
 
 from app.agents.tools import get_all_tasks, get_task, create_task, update_task, delete_task
 
@@ -25,16 +26,12 @@ _system_prompt = (
 )
 
 _database_url = os.getenv("DATABASE_URL", "")
+if not _database_url:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
-if _database_url:
-    from langgraph.checkpoint.postgres import PostgresSaver
-    _memory = PostgresSaver.from_conn_string(_database_url)
-    _memory.setup()
-else:
-    from langgraph.checkpoint.sqlite import SqliteSaver
-    _checkpoints_db = os.getenv("CHECKPOINTS_DB_PATH", "checkpoints.db")
-    _conn = sqlite3.connect(_checkpoints_db, check_same_thread=False)
-    _memory = SqliteSaver(_conn)
+_db_conn = psycopg.connect(_database_url, autocommit=True)
+_memory = PostgresSaver(_db_conn)
+_memory.setup()
 
 agent = create_agent(_llm, _tools, checkpointer=_memory, system_prompt=_system_prompt)
 

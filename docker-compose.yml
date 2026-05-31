@@ -1,4 +1,16 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: agent_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   app:
     build: .
     ports:
@@ -7,6 +19,9 @@ services:
       - .env
     volumes:
       - ./uploads:/app/uploads
-      - ./tasks.db:/app/tasks.db
-      - ./checkpoints.db:/app/checkpoints.db
+    depends_on:
+      - db
     restart: unless-stopped
+
+volumes:
+  postgres_data:

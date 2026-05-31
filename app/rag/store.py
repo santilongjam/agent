@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
-from langchain_core.embeddings import Embeddings
+from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
@@ -19,22 +18,10 @@ VECTOR_SIZE = 384
 _embeddings = None
 
 
-class _SentenceTransformerEmbeddings(Embeddings):
-    def __init__(self, model_name: str):
-        self.model = SentenceTransformer(model_name)
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        texts = [str(t) for t in texts if t]
-        return self.model.encode(texts, show_progress_bar=False).tolist()
-
-    def embed_query(self, text: str) -> list[float]:
-        return self.model.encode(text, show_progress_bar=False).tolist()
-
-
-def _get_embeddings() -> _SentenceTransformerEmbeddings:
+def _get_embeddings() -> FastEmbedEmbeddings:
     global _embeddings
     if _embeddings is None:
-        _embeddings = _SentenceTransformerEmbeddings(EMBEDDING_MODEL)
+        _embeddings = FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
     return _embeddings
 
 

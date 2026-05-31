@@ -6,15 +6,12 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 load_dotenv()
 
 _raw_url = os.getenv("DATABASE_URL", "")
+if not _raw_url:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
-if _raw_url:
-    # Render provides postgres:// — SQLAlchemy needs postgresql+psycopg2://
-    DATABASE_URL = _raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
-    engine = create_engine(DATABASE_URL)
-else:
-    DB_PATH = os.getenv("DB_PATH", "tasks.db")
-    DATABASE_URL = f"sqlite:///{DB_PATH}"
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Render provides postgres:// — SQLAlchemy needs postgresql+psycopg2://
+DATABASE_URL = _raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 
 

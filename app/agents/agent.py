@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessageChunk
-from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app.agents.tools import get_all_tasks, get_task, create_task, update_task, delete_task
 
@@ -25,9 +24,17 @@ _system_prompt = (
     "Always confirm actions with the user's intent and be concise in your responses."
 )
 
-_checkpoints_db = os.getenv("CHECKPOINTS_DB_PATH", "checkpoints.db")
-_conn = sqlite3.connect(_checkpoints_db, check_same_thread=False)
-_memory = SqliteSaver(_conn)
+_database_url = os.getenv("DATABASE_URL", "")
+
+if _database_url:
+    from langgraph.checkpoint.postgres import PostgresSaver
+    _memory = PostgresSaver.from_conn_string(_database_url)
+    _memory.setup()
+else:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    _checkpoints_db = os.getenv("CHECKPOINTS_DB_PATH", "checkpoints.db")
+    _conn = sqlite3.connect(_checkpoints_db, check_same_thread=False)
+    _memory = SqliteSaver(_conn)
 
 agent = create_agent(_llm, _tools, checkpointer=_memory, system_prompt=_system_prompt)
 

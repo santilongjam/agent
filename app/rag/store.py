@@ -15,6 +15,9 @@ COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "my_rag_documents")
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 VECTOR_SIZE = 384
 
+# Lazy-loaded embeddings
+_embeddings = None
+
 
 class _SentenceTransformerEmbeddings(Embeddings):
     def __init__(self, model_name: str):
@@ -28,7 +31,11 @@ class _SentenceTransformerEmbeddings(Embeddings):
         return self.model.encode(text, show_progress_bar=False).tolist()
 
 
-_embeddings = _SentenceTransformerEmbeddings(EMBEDDING_MODEL)
+def _get_embeddings() -> _SentenceTransformerEmbeddings:
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = _SentenceTransformerEmbeddings(EMBEDDING_MODEL)
+    return _embeddings
 
 
 def _get_client() -> QdrantClient:
@@ -50,5 +57,6 @@ def get_vector_store() -> QdrantVectorStore:
     return QdrantVectorStore(
         client=client,
         collection_name=COLLECTION_NAME,
-        embedding=_embeddings,
+        embedding=_get_embeddings(),
     )
+
